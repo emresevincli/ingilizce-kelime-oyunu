@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>İngilizce Kelime Oyunu</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #111;
+      color: #f8f8f8;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 600px;
+      width: 90%;
+      padding: 20px;
+      background-color: #1c1c1c;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(255, 102, 0, 0.3);
+      text-align: center;
+    }
+
+    .question {
+      font-size: 28px;
+      margin-bottom: 16px;
+    }
+
+    .options button {
+      display: block;
+      width: 100%;
+      margin: 10px 0;
+      padding: 12px;
+      font-size: 18px;
+      background-color: #2c2c2c;
+      color: #fff;
+      border: 2px solid #444;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .options button:hover {
+      background-color: #ff6600;
+    }
+
+    .options button.correct {
+      background-color: green;
+      border-color: green;
+    }
+
+    .options button.incorrect {
+      background-color: red;
+      border-color: red;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 20px;
+    }
+
+    .controls button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 8px;
+      border: none;
+    }
+
+    .counter {
+      margin-top: 15px;
+      font-size: 20px;
+    }
+
+    .results {
+      margin-top: 20px;
+      text-align: left;
+    }
+
+    .results p {
+      margin: 5px 0;
+    }
+
+    .start-screen {
+      text-align: center;
+    }
+
+    .start-screen button {
+      background-color: #ff6600;
+      color: white;
+      padding: 14px 28px;
+      font-size: 20px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    .pronounce-btn {
+      margin-top: 10px;
+      background: #ff6600;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script>
+    let words = [];       // Yüklenecek 500 kelimelik JSON
+    let correctWords = [];
+    let wrongWords = [];
+    let currentIndex = 0;
+    let timer;
+    let timeLeft = 5;
+    let isPaused = false;
+    let currentQuestion = null;
+
+    const app = document.getElementById('app');
+
+    // Kelimeleri dışarıdan yükle
+    fetch('words.json')
+      .then(res => res.json())
+      .then(data => {
+        words = data;
+        words.sort(() => Math.random() - 0.5); // Karıştır
+        showStartScreen();
+      })
+      .catch(err => console.error('Words yüklenirken hata:', err));
+
+    function speak(text) {
+      const msg = new SpeechSynthesisUtterance(text);
+      msg.lang = 'en-US';
+      speechSynthesis.speak(msg);
+    }
+
+    function showStartScreen() {
+      app.innerHTML = `
+        <div class="start-screen">
+          <h1>İngilizce Kelime Oyunu</h1>
+          <button onclick="startGame()">Başla</button>
+        </div>
+      `;
+    }
+
+    function startGame() {
+      correctWords = [];
+      wrongWords = [];
+      currentIndex = 0;
+      timeLeft = 5;
+      words.sort(() => Math.random() - 0.5);
+      isPaused = false;
+      showQuestion();
+    }
+
+    function showQuestion() {
+      if (currentIndex >= words.length) return showResults();
+      const word = words[currentIndex];
+      currentQuestion = word;  // Şu anki soruyu kaydediyoruz
+
+      const incorrect = words.filter(w => w.tr !== word.tr);
+      const wrongOption = incorrect[Math.floor(Math.random() * incorrect.length)].tr;
+
+      // Cevapları karıştır
+      const options = [word.tr, wrongOption];
+      // Doğru cevabın yerini karıştırıyoruz
+      options.sort(() => Math.random() - 0.5);
+
+      app.innerHTML = `
+        <div class="container">
+          <div class="question">${word.en}</div>
+          <button class="pronounce-btn" onclick="speak('${word.en}')">Dinle</button>
+          <div class="options">
+            <button onclick="checkAnswer(this, '${options[0]}')">${options[0]}</button>
+            <button onclick="checkAnswer(this, '${options[1]}')">${options[1]}</button>
+          </div>
+          <div class="counter">Süre: <span id="timer">${timeLeft}</span>s</div>
+          <div class="controls">
+            <button onclick="togglePause()">${isPaused ? 'Devam Et' : 'Duraklat'}</button>
+            <button onclick="endGame()">Oyunu Bitir</button>
+          </div>
+        </div>
+      `;
+      resetTimer();
+    }
+
+    function checkAnswer(button, selectedAnswer) {
+      clearInterval(timer);
+
+      const word = currentQuestion;
+      const isCorrect = selectedAnswer === word.tr;
+
+      button.classList.add(isCorrect ? 'correct' : 'incorrect');
+      
+      // Eğer oyun duraklatılmadıysa, cevapları kaydet
+      if (!isPaused) {
+        if (isCorrect) {
+          correctWords.push(word);
+        } else {
+          wrongWords.push(word);
+        }
+      }
+
+      disableOptions();
+      setTimeout(() => {
+        currentIndex++;
+        timeLeft = 5;
+        showQuestion(); // Yeni soruyu göster
+      }, 1000);
+    }
+
+    function disableOptions() {
+      document.querySelectorAll('.options button').forEach(btn => btn.disabled = true);
+    }
+
+    function resetTimer() {
+      clearInterval(timer);
+      const timerSpan = document.getElementById('timer');
+      timer = setInterval(() => {
+        if (!isPaused) {
+          timeLeft--;
+          timerSpan.textContent = timeLeft;
+          if (timeLeft <= 0) {
+            clearInterval(timer);
+            wrongWords.push(currentQuestion); // Zaman bittiğinde yanlış cevabı kaydet
+            currentIndex++;
+            timeLeft = 5;
+            showQuestion();
+          }
+        }
+      }, 1000);
+    }
+
+    function togglePause() {
+      isPaused = !isPaused;
+
+      if (isPaused) {
+        clearInterval(timer); // Duraklatıldığında zamanlayıcıyı durdur
+        app.querySelector('.counter').style.visibility = 'hidden'; // Zamanı gizle
+      } else {
+        resetTimer(); // Devam ettiğinde zamanlayıcıyı yeniden başlat
+        app.querySelector('.counter').style.visibility = 'visible'; // Zamanı göster
+      }
+      
+      // Duraklatma sonrası buton metnini değiştir
+      app.querySelector('.controls button').textContent = isPaused ? 'Devam Et' : 'Duraklat';
+    }
+
+    function endGame() {
+      clearInterval(timer);
+      showResults();
+    }
+
+    function showResults() {
+      app.innerHTML = `
+        <div class="container">
+          <h2>Oyun Bitti</h2>
+          <p>✅ Doğru: ${correctWords.length}</p>
+          <p>❌ Yanlış: ${wrongWords.length}</p>
+          <div class="results">
+            <h3>Doğru Bildiklerin:</h3>
+            ${correctWords.map(w => `<p>${w.en} → ${w.tr}</p>`).join('')}
+            <h3>Yanlış Bildiklerin:</h3>
+            ${wrongWords.map(w => `<p>${w.en} → ${w.tr}</p>`).join('')}
+          </div>
+          <button onclick="showStartScreen()">Tekrar Başla</button>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>
